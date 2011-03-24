@@ -146,7 +146,7 @@ def convertToRPN (input): #Shunting-yard algorithm. Don't bother trying to figur
     operatorstack = []
     
     for i in inputstack:
-        if isOp(i) == False: #means it's either a number or a variable
+        if not isOp(i): #means it's either a number or a variable
             outputstack.append(i)
         elif isOp(i):
             if i == '(':
@@ -234,21 +234,34 @@ def derive(function, low, upp):
     if isOp(postfix[upp]):
         
         #See above table for the following to make sense
-        head1 = postfix[low:upp-1-grasp(postfix,upp-1)] #due to python's method of list splicing, upp-1 rather than upp-2 is used
-        head2 = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound
+        firsthead = postfix[low:upp-1-grasp(postfix,upp-1)] #due to python's method of list splicing, upp-1 rather than upp-2 is used -> u
+        firstderivative = derive(postfix,low,upp-2-grasp(postfix,upp-1)) #note how here we go back to the notation in the chart -> u'
+        fh,fd = firsthead, firstderivative #become i'm that lazy
+        
+        secondhead = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound -> v
+        secondderivative = derive(postfix,upp-1-grasp(postfix,upp-1),upp-1) #note how here we go back to the notation in the chart -> v'
+        sh,sd = secondhead,secondderivative
 
-        if postfix[upp] == "-" or postfix[upp] == "+": #simplest situation, we just find derivates of each part and then add the plus/minus at the end
-            derivat.extend(derive(postfix,low,upp-2-grasp(postfix,upp-1))) #send the first head to be derived, add it to the final derivative
-            derivat.extend(derive(postfix,upp-1-grasp(postfix,upp-1),upp-1)) #send the second head to be derived, add it to the final derivative
-            derivat.append(postfix[upp]) #finally add the operator, in this case either + or -
+        if postfix[upp] == "-" or postfix[upp] == "+": #simplest situation, we have uv+/-, we turn it to u'v'+/-
+            
+            if fd == ['0'] and sd == ['0']: #both null
+                derivat.append('0') #add a null to final
+            elif fd != ['0'] and sd == ['0']: #second derivative in null, we can just forget about it
+                derivat.extend(fd) #all we need is the first derivative then
+            elif fd == ['0'] and sd != ['0'] and postfix[upp] == "+": #first derivative is null, no fear of unary minus
+                derivat.extend(sd) #so we can just add in the second derivative
+            else:
+                derivat.extend(fd) #add first derivative to final -> u'
+                derivat.extend(sd) #add second derivative to final -> u'v'
+                derivat.append(postfix[upp]) #add op at the end -> u'v'+/-
         
         elif postfix[upp] == "*" or postfix[upp] == "/": #here we use the product rule to differentiate -> u'v + uv', or the quotient rule -> (u'v - v'u)/v^2
-            derivat.extend(derive(postfix,low,upp-2-grasp(postfix,upp-1))) #send the first head to be derived, add to final. Now final has u' in it
-            derivat.extend(postfix[upp-1-grasp(postfix,upp-1):upp]) #add the second head to the final. final now has u'v in it
+            derivat.extend(fd) #send the first head to be derived, add to final. Now final has u' in it
+            derivat.extend(sh) #add the second head to the final. final now has u'v in it
             derivat.append("*") #add operator to the final. final now has u'v* in it
             
-            derivat.extend(derive(postfix,upp-1-grasp(postfix,upp-1),upp-1)) # u'v*v'
-            derivat.extend(postfix[low:upp-1-grasp(postfix,upp-1)]) # u'v*v'u
+            derivat.extend(sd) # u'v*v'
+            derivat.extend(fh) # u'v*v'u
             derivat.append("*") # u'v*v'u*
             
             if postfix[upp] == "*": #product rule
@@ -256,20 +269,20 @@ def derive(function, low, upp):
             else: #quotient rule
                 derivat.append("-") # u'v*v'u*-
                 
-                derivat.extend(postfix[upp-1-grasp(postfix,upp-1):upp]) #u'v*v'u*- v
+                derivat.extend(sh) #u'v*v'u*-v
                 derivat.append("2") # u'v*v'u*-v2
                 derivat.append("^") # u'v*v'u*-v2^
                 derivat.append("/") # u'v*v'u*-v2^/
         
-        elif postfix[upp] == "^": #use the chain rule. (f(x))^n = nf'(x)(f(x))^(n-1)
-            if varname not in postfix[upp-1-grasp(postfix,upp-1):upp]: #checks that we don't have something to the power of x -> not yet implemented
-                derivat.extend(postfix[upp-1-grasp(postfix,upp-1):upp]) #send the second to the the final -> now it contains n
-                derivat.extend(derive(postfix,low,upp-2-grasp(postfix,upp-1))) # nf'(x)
+        elif postfix[upp] == "^": #use the chain rule. (f(x))^n = nf'(x)(f(x))^(n-1) where f(x) is u and n is v
+            if varname not in sh: #checks that we don't have something to the power of x -> not yet implemented
+                derivat.extend(sh) #send the second to the the final -> now it contains n
+                derivat.extend(fd) # nf'(x)
                 derivat.append("*") #nf'(x)*
                 
-                derivat.extend(postfix[low:upp-1-grasp(postfix,upp-1)]) #nf'(x)*f(x)
+                derivat.extend(fh) #nf'(x)*f(x)
                 
-                exponent = postfix[upp-1-grasp(postfix,upp-1):upp]
+                exponent = sh[:] #just a copy which is later changed
                 
                 #HACK HACK HACK in order to deal with negative powers (since i've been avoiding unary minus)
                 #Best thing would be to call an RPN evaluator here to deal with it
@@ -287,17 +300,6 @@ def derive(function, low, upp):
         
         else:
             sys.exit('fail one')
-                
-        #if grasp(head1) == 2:
-            #print 'head1 has reached endpoint'
-        #if grasp(head2) == 2:
-            #print 'head2 has reached endpoint'
-        #print "postfix: " + str(postfix)
-        #print "head1: " + str(head1)
-        #print "head2: " + str(head2)
-        
-        #derive(head1, 0, -1)
-        #derive(head2, 0, -1)
         
     elif isInt(postfix[upp]):
         derivat.append('0') #all numbers derive to 0
