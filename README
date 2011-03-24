@@ -1,0 +1,5 @@
+Python Symbolic Derivative Finder
+
+Essentially, it does what it says on the tin. It avoids the usage of any sort of binary tree though, opting to use RPN and derive from there
+
+Currently, it only supports the most basic of derivatives, with no trig functions, exponenents with x, lns, or anything.
