@@ -259,7 +259,8 @@ def derive(function, low, upp):
             
             #next block deals with u'v
             if fd == ['0'] or sh == ['0']: #one of u'v is equal to 0 -> u'v == 0
-                derivat.append('0') #just add a null
+                if postfix[upp] == "/":
+                    derivat.append('0') #add a null only in the case of a unary minus possibilility under quotient rule
             elif fd == ['1']: # u' is 1 so we have 1v* == v
                 derivat.extend(sh)
             elif sh == ['1']: # v is 1 so we have 1u'* == u'
@@ -270,8 +271,8 @@ def derive(function, low, upp):
                 derivat.append("*") #add operator to the final. final now has u'v* in it
             
             #next block deals with v'u
-            if fh == ['0'] or sd == ['0']: #one of uv' is null -> uv' == 0
-                derivat.append('0')
+            if fh == ['0'] or sd == ['0']: #one of uv' is null -> v'u == 0
+                pass #we can just ignore it even exists, and then later avoid adding an operator
             elif fh == ['1']: # u is 1 so we have 1v'* == v'
                 derivat.extend(sd)
             elif sd == ['1']: # v' is 1 so we have 1u* == u
@@ -281,18 +282,24 @@ def derive(function, low, upp):
                 derivat.extend(fh) # u'v*v'u
                 derivat.append("*") # u'v*v'u*
             
-            #this can be simplified with the same stuff as with the +/- operators. How can the code be made reusable?
+            #this block then does the last part of both rules
             if postfix[upp] == "*": #product rule
-                derivat.append("+") # u'v*v'u*+
+                if fd != ['0'] and fh != ['0'] and sd != ['0'] and sh != ['0']: #Only add in an operator if we haven't already skipped a zero somewhere
+                    derivat.append("+") # u'v*v'u*+
             else: #quotient rule
-                derivat.append("-") # u'v*v'u*-
+                if fh != ['0'] and sd != ['0']: #check that v'u is not == 0
+                    derivat.append("-") # u'v*v'u*-
                 
-                if sh != ['1']: #if sh, and hence v, == 1, then you're dividing by 1, so it can be skipped
+                if sh == ['1']: #if sh, and hence v, == 1, then you're dividing by 1, so it can be skipped
+                    pass
+                elif (fd == ['0'] or sh == ['0']) and (fh == ['0'] or sd == ['0']): #we have u'v and v'u both as zero, so we are dividing 0 by something
+                    pass
+                else:
                     derivat.extend(sh) #u'v*v'u*-v
                     derivat.append("2") # u'v*v'u*-v2
                     derivat.append("^") # u'v*v'u*-v2^
                     derivat.append("/") # u'v*v'u*-v2^/
-        
+
         elif postfix[upp] == "^": #use the chain rule. (f(x))^n = nf'(x)(f(x))^(n-1) where f(x) is u and n is v
             if varname not in sh: #checks that we don't have something to the power of x -> not yet implemented
                 derivat.extend(sh) #send the second to the the final -> now it contains n
