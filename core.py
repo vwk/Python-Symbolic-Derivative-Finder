@@ -300,27 +300,43 @@ def derive(function, low, upp):
                     derivat.append("^") # u'v*v'u*-v2^
                     derivat.append("/") # u'v*v'u*-v2^/
 
-        elif postfix[upp] == "^": #use the chain rule. (f(x))^n = nf'(x)(f(x))^(n-1) where f(x) is u and n is v
+        elif postfix[upp] == "^": #use the chain rule. (f(x))^n = nf'(x)(f(x))^(n-1) where f(x) is u (and so fh) and n is v (and so sh)
             if varname not in sh: #checks that we don't have something to the power of x -> not yet implemented
-                derivat.extend(sh) #send the second to the the final -> now it contains n
-                derivat.extend(fd) # nf'(x)
-                derivat.append("*") #nf'(x)*
-                
-                derivat.extend(fh) #nf'(x)*f(x)
-                
-                exponent = sh[:] #just a copy which is later changed
-                
-                #HACK HACK HACK in order to deal with negative powers (since i've been avoiding unary minus)
-                #Best thing would be to call an RPN evaluator here to deal with it
-                if isOp(exponent[-1]):
-                    exponent = 0 - int(exponent[1])
-                else:
-                    exponent = int(exponent[0])
+                if sh != ['0'] and fh != ['0'] and fd != ['0']: #make sure that none of the things being multiplied are equal to 0
                     
-                derivat.append(str(exponent-1)) #nf'(x)*f(x)(n-1)
-                derivat.append("^") #nf'(x)*f(x)(n-1)^
-                
-                derivat.append("*") #nf'(x)*f(x)(n-1)^*
+                    if sh == ['1'] and fd == ['1']: #both n and f'(x) are 1, so ignore
+                        pass
+                    elif sh == ['1']: # n is equal to 1, we can ignore it
+                        derivat.extend(fd)
+                    elif fd == ['1']: # f'(x) is equal to 1, we can ignore it
+                        derivat.extend(sh)
+                    else:
+                        derivat.extend(sh) #send the second head to the the final -> now it contains n
+                        derivat.extend(fd) # nf'(x)
+                        derivat.append("*") #nf'(x)*
+
+                    exponent = sh[:] #just a copy which is later changed
+                    #HACK HACK HACK in order to deal with negative powers (since i've been avoiding unary minus)
+                    #Best thing would be to call an RPN evaluator here to deal with it
+                    if isOp(exponent[-1]):
+                        exponent = 0 - int(exponent[1])
+                    else:
+                        exponent = int(exponent[0])
+                    exponent -= 1
+                    
+                    if exponent == 0: #anything to the power of 0 is 1, so we can ignored it
+                        pass
+                    elif exponent == 1: #anything to the ^1 is itself, so we just add in f(x)
+                        derivat.extend(fh)
+                    else:
+                        derivat.extend(fh) #nf'(x)*f(x) usually, or as it may be, nf(x), f'(x)f(x) or just f(x)
+                        derivat.append(str(exponent)) #nf'(x)*f(x)(n-1)
+                        derivat.append("^") #nf'(x)*f(x)(n-1)^
+                    
+                    if exponent != 0 or (sh != ['1'] and fd != ['1']): #Check that some forms of nf'(x) or f(x)(n-1)^ exist
+                        derivat.append("*") #nf'(x)*f(x)(n-1)^*
+                else:
+                    derivat.append('0')
             else:
                 print 'Exponents of x are currently not supported'
         
