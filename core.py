@@ -254,13 +254,13 @@ def derive(function, low, upp):
             secondhead = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound -> v
             secondderivative = derive(postfix,upp-1-grasp(postfix,upp-1),upp-1) #note how here we go back to the notation in the chart -> v'
             sh,sd = secondhead,secondderivative
-        
+
         elif nary == 1: #means it's a unary operator
             
             firsthead = postfix[low:upp] #same as in binary, list splicing means upp instead of upp-1 is used
             firstderivative = derive(postfix,low,upp-1) #same as binary, go back to proper notation
             fh, fd = firsthead, firstderivative
-    
+
         if postfix[upp] == "-" or postfix[upp] == "+": #simplest situation, we have uv+/-, we turn it to u'v'+/-
             
             if fd == ['0'] and sd == ['0']: #both null
@@ -315,7 +315,7 @@ def derive(function, low, upp):
                 if sh == ['1']: #if sh, and hence v, == 1, then you're dividing by 1, so it can be skipped
                     pass
                 elif (fd == ['0'] or sh == ['0']) and (fh == ['0'] or sd == ['0']): #we have u'v and v'u both as zero, so we are dividing 0 by something
-                    pass
+                    derivat.append('0')
                 else:
                     derivat.extend(sh) #u'v*v'u*-v
                     derivat.append("2") # u'v*v'u*-v2
