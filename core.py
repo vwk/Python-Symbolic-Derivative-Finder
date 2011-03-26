@@ -1,4 +1,4 @@
-import sys
+import sys,time
 
 def cleanInput(input): #standardises input
     
@@ -10,7 +10,7 @@ def setMainVar(input): #Allows for any variable, not just x to be used.
     varname = input
 
 def isOp (input):
-    oplist = ['^', '*', '/', '+', '-', '(', ')']
+    oplist = ['^', 'neg()', '*', '/', '+', '-', '(', ')']
     if input in oplist:
         return True
     else:
@@ -31,9 +31,15 @@ def isVar (input): # can (and will) be expanded to take multiple variables #WTF 
 
 def returnOpDetails(operator): #returns list, [0] is precedence, [1] is associativity, [2] is grasp
     
-    optable = {'^':[4,'r',2], '*':[3, 'l',2], '/':[3,'l',2], '+':[2,'l',2], '-':[2,'l',2]}
+    optable = {'^':[4,'r',2], 'neg()':[3,'r',1], '*':[3, 'l',2], '/':[3,'l',2], '+':[2,'l',2], '-':[2,'l',2]}
     
     return optable[operator]
+    
+def neg(operand): #a unary minus function
+    if isInt(operand): #check that an integer has been passed
+        return -int(operand)
+    else:
+        return False
 
 #REFERENCE IMPLEMENTATION
 #OVERLY VERBOSE, OVER-COMPLICATED AND OVER-COMMENTED
@@ -41,15 +47,14 @@ def returnOpDetails(operator): #returns list, [0] is precedence, [1] is associat
 
 def tokenizer (input): #Splits function into its constituent pieces
 
-    inputstack = list(input) #wow this actually does a lot of the hard work for you
+    inputstack = list(input)
     outputstack = []
     tempstack = []
     
     #checks that the input makes some sort of sense initially
     if isOp(inputstack[0]):
-        if inputstack[0] == '-': #Must be a starting unary minus. Add in 0+ at the start. HACKY but fun
-            inputstack.insert(0, '+')
-            inputstack.insert(0, '0')
+        if inputstack[0] == '-': #Must be a starting unary minus. Convert to a neg()
+            inputstack[0] = 'neg()'
         elif inputstack[0] == '+': #Must be starting with unary plus. Remove this as it's redundant
             del inputstack[0]
         elif inputstack[0] == '(': #Starts with a bracket, which is valid
@@ -92,6 +97,8 @@ def tokenizer (input): #Splits function into its constituent pieces
         
         elif isOp(tempstack[0]) and not isOp(tempstack[1]): # something like -3 or +56, or +x, -x -> add to output
             outputstack.append(tempstack.pop(0))
+            if outputstack[-1] == ')': #check the operator just popped off for special cases like (5/7)x
+                outputstack.append('*')
         
         #this is going to be a complete clusterfuck
         elif isOp(tempstack[0]) and isOp(tempstack[1]): # Two operators following each other.
@@ -115,12 +122,9 @@ def tokenizer (input): #Splits function into its constituent pieces
              elif tempstack[0] in samepatternops: #all these depend on the 2nd operator, not first, to decide which action to take
                  if tempstack[1] == '+': # something like 2^+3x, or 2*+3, or 2/+3 - unary plus. Remove unary op
                      tempstack.pop()
-                 elif tempstack[1] == '-': #something like 2^-3x or 2*-3 or 2/-3 - unary minus = ask to re-enter with brackets
-                     if tempstack[0] == '(':
-                         outputstack.append(tempstack.pop(0))
-                         outputstack.append('0') # make the unary minus into binary
-                     else:
-                         sys.exit('Please re-enter unary negative in brackets')
+                 elif tempstack[1] == '-': #something like 2^-3x or 2*-3 or 2/-3 - unary minus = convert to neg
+                     outputstack.append(tempstack.pop(0))
+                     tempstack[0] = 'neg()' #note how its outputstack[0] now due to the first element being removed
                  elif tempstack[1] == '(': # 3^(67x), 3*(67x), 3/(67x), can add the op to the output
                      outputstack.append(tempstack.pop(0))
                  else:
@@ -197,7 +201,7 @@ def convertToRPN (input): #Shunting-yard algorithm. Don't bother trying to figur
 #Hence grasp would be 0
 
 #Counter version: OM's idea. Not broken like the old recursive one.
-def grasp (input, index=100):
+def grasp (input, index=1000):
     graspcounter = 0 #keeps track of the grasp
     poscounter = 0 #keeps a track of the position
     
@@ -206,7 +210,7 @@ def grasp (input, index=100):
     
     for i in reversed:
         if isOp(i):
-            graspcounter += 2 # binary operators
+            graspcounter += returnOpDetails(i)[2] # returns the grasp of each, allowing for unary operators
         if poscounter == graspcounter:
             return graspcounter
 
@@ -227,29 +231,46 @@ def leftGraspBound (input,index):
 #from | low                || upp-1-grasp[upp-1]
 #to   | upp-2-grasp[upp-1] || upp-1
 
+#For a unary operator:
+#op_1 = postfix[i-1]
+#index at upp-1
+#grasp from low to upp-1
+
 def derive(function, low, upp):
     postfix = function[:] #use same notation as the paper
     derivat = [] #where the final derivative will be stored
     
     if isOp(postfix[upp]):
         
-        #See above table for the following to make sense
-        firsthead = postfix[low:upp-1-grasp(postfix,upp-1)] #due to python's method of list splicing, upp-1 rather than upp-2 is used -> u
-        firstderivative = derive(postfix,low,upp-2-grasp(postfix,upp-1)) #note how here we go back to the notation in the chart -> u'
-        fh,fd = firsthead, firstderivative #become i'm that lazy
+        nary = returnOpDetails(postfix[upp])[2] #returns grasp and hence whether operator is binary or unary
         
-        secondhead = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound -> v
-        secondderivative = derive(postfix,upp-1-grasp(postfix,upp-1),upp-1) #note how here we go back to the notation in the chart -> v'
-        sh,sd = secondhead,secondderivative
-
+        if nary == 2: #means it's a binary operator
+            
+            #See above table for the following to make sense
+            firsthead = postfix[low:upp-1-grasp(postfix,upp-1)] #due to python's method of list splicing, upp-1 rather than upp-2 is used -> u
+            firstderivative = derive(postfix,low,upp-2-grasp(postfix,upp-1)) #note how here we go back to the notation in the chart -> u'
+            fh,fd = firsthead, firstderivative #become i'm that lazy
+        
+            secondhead = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound -> v
+            secondderivative = derive(postfix,upp-1-grasp(postfix,upp-1),upp-1) #note how here we go back to the notation in the chart -> v'
+            sh,sd = secondhead,secondderivative
+        
+        elif nary == 1: #means it's a unary operator
+            
+            firsthead = postfix[low:upp] #same as in binary, list splicing means upp instead of upp-1 is used
+            firstderivative = derive(postfix,low,upp-1) #same as binary, go back to proper notation
+            fh, fd = firsthead, firstderivative
+    
         if postfix[upp] == "-" or postfix[upp] == "+": #simplest situation, we have uv+/-, we turn it to u'v'+/-
             
             if fd == ['0'] and sd == ['0']: #both null
                 derivat.append('0') #add a null to final
             elif fd != ['0'] and sd == ['0']: #second derivative in null, we can just forget about it
                 derivat.extend(fd) #all we need is the first derivative then
-            elif fd == ['0'] and sd != ['0'] and postfix[upp] == "+": #first derivative is null, no fear of unary minus
+            elif fd == ['0'] and sd != ['0']: #first derivative is null, take note of unary minus
                 derivat.extend(sd) #so we can just add in the second derivative
+                if postfix[upp] == '-': #means that we have -v'
+                    derivat.append('neg()')
             else:
                 derivat.extend(fd) #add first derivative to final -> u'
                 derivat.extend(sd) #add second derivative to final -> u'v'
@@ -259,8 +280,7 @@ def derive(function, low, upp):
             
             #next block deals with u'v
             if fd == ['0'] or sh == ['0']: #one of u'v is equal to 0 -> u'v == 0
-                if postfix[upp] == "/":
-                    derivat.append('0') #add a null only in the case of a unary minus possibilility under quotient rule
+                pass #forget it exists, and later add a unary operator if needed
             elif fd == ['1']: # u' is 1 so we have 1v* == v
                 derivat.extend(sh)
             elif sh == ['1']: # v is 1 so we have 1u'* == u'
@@ -287,8 +307,10 @@ def derive(function, low, upp):
                 if fd != ['0'] and fh != ['0'] and sd != ['0'] and sh != ['0']: #Only add in an operator if we haven't already skipped a zero somewhere
                     derivat.append("+") # u'v*v'u*+
             else: #quotient rule
-                if fh != ['0'] and sd != ['0']: #check that v'u is not == 0
+                if fd != ['0'] and sh != ['0'] and fh != ['0'] and sd != ['0']: #Same as above, only add if nothing has equalled 0 so far
                     derivat.append("-") # u'v*v'u*-
+                elif (fd == ['0'] or sh == ['0']) and (fh != ['0'] and sd != ['0']): #if u'v is 0 but v'u isn't, add a unary negative for v'u
+                    derivat.append("neg()") #v'u*neg()
                 
                 if sh == ['1']: #if sh, and hence v, == 1, then you're dividing by 1, so it can be skipped
                     pass
@@ -316,30 +338,35 @@ def derive(function, low, upp):
                         derivat.append("*") #nf'(x)*
 
                     exponent = sh[:] #just a copy which is later changed
-                    #HACK HACK HACK in order to deal with negative powers (since i've been avoiding unary minus)
-                    #Best thing would be to call an RPN evaluator here to deal with it
-                    if isOp(exponent[-1]):
-                        exponent = 0 - int(exponent[1])
-                    else:
-                        exponent = int(exponent[0])
-                    exponent -= 1
                     
-                    if exponent == 0: #anything to the power of 0 is 1, so we can ignored it
+                    #TODO call an RPN evaluator for the power in case it's in the form 2 3 *
+                    if exponent[-1] == 'neg()': #if we have a negative power such as ^-1 or ^-2, it's in the form [....,neg()]
+                        exponent[0] = str(int(exponent[0]) + 1) #to take away one from the power in this case, can just add 1 without changing the neg()
+                    else:
+                        exponent = [str(int(exponent[0]) - 1)] #positive power, so we take away one.
+                    
+                    if exponent[0] == '0': #anything to the power of 0 is 1, so we can ignored it
                         pass
-                    elif exponent == 1: #anything to the ^1 is itself, so we just add in f(x)
+                    elif exponent[0] == '1': #anything to the ^1 is itself, so we just add in f(x)
                         derivat.extend(fh)
                     else:
                         derivat.extend(fh) #nf'(x)*f(x) usually, or as it may be, nf(x), f'(x)f(x) or just f(x)
-                        derivat.append(str(exponent)) #nf'(x)*f(x)(n-1)
+                        derivat.extend(exponent) #nf'(x)*f(x)(n-1)
                         derivat.append("^") #nf'(x)*f(x)(n-1)^
                     
-                    if exponent != 0 or (sh != ['1'] and fd != ['1']): #Check that some forms of nf'(x) or f(x)(n-1)^ exist
+                    if exponent[0] != '0' or (sh != ['1'] and fd != ['1']): #Check that some forms of nf'(x) or f(x)(n-1)^ exist
                         derivat.append("*") #nf'(x)*f(x)(n-1)^*
                 else:
                     derivat.append('0')
             else:
                 print 'Exponents of x are currently not supported'
         
+        elif postfix[upp] == "neg()":#simple f(x)neg() goes to f'(x)neg()
+            if fd == ['0']: #f'(x) is 0, so we can forget about the neg()
+                derivat.append('0')
+            else:
+                    derivat.extend(fd)
+                    derivat.append('neg()')
         else:
             sys.exit('fail one')
         
@@ -363,9 +390,21 @@ variablename = setMainVar(cleanInput(raw_input("please enter that you're differe
 
 ##########################TESTCASES#################################
 
-testcases = ['1+1', '-2+x', '6+78-847', '1+x', '748x^2', '5/(374+45x)', '(1+x)/(1-x)', '7x^10 - (54/34x)', '1+3(x+2)', '2x*(-2)', '((x+x^(-1))^2 +9 )^3', '(x/5^x)*(2^((x^(-1))/8^x))', '2^((-45) + 2x)', '(x^6)^(x^(-1)) + 23^x']
+testcases = ['1+1', '-2+x', '6+78-847', '1+x', '748x^2', '5/(374+45x)', '(1+x)/(1-x)', '7x^10 - (54/34x)', '1+3(x+2)', '2x*(-2)', 'x^6 + 98x^2 + (5/7)x^4', '((x+x^(-1))^2 +9 )^3', '(x/5^x)*(2^((x^(-1))/8^x))', '2^((-45) + 2x)', '(x^6)^(x^(-1)) + 23^x']
 
+#for i in testcases:
+    #print "this is testcase number " + str(testcases.index(i))
+    #print i
+    #print tokenizer(cleanInput(i))
+    #print convertToRPN(cleanInput(i))
+    #print grasp(convertToRPN(cleanInput(i)))
+    #try:
+        #print grasp(convertToRPN(cleanInput(i)), convertToRPN(cleanInput(i)).index('neg()'))
+    #except ValueError:
+        #pass
+    #print "\n"
 
+start = time.time()
 for i in testcases:
     print "this is testcase number " + str(testcases.index(i))
     print i
@@ -374,3 +413,4 @@ for i in testcases:
     derivative = derive(a, 0, -1)
     print ' '.join(j for j in derivative)
     print "\n"
+print time.time()-start
