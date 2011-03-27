@@ -152,7 +152,7 @@ def convertToRPN (input): #Shunting-yard algorithm. Don't bother trying to figur
     for i in inputstack:
         if not isOp(i): #means it's either a number or a variable
             outputstack.append(i)
-        elif isOp(i):
+        else:
             if i == '(':
                 operatorstack.append(i)
             elif i == ')':
@@ -188,7 +188,61 @@ def convertToRPN (input): #Shunting-yard algorithm. Don't bother trying to figur
         outputstack.append(operatorstack.pop(-1))
 
     return outputstack
+
+def convertFromRPN (input, low, upp): #Should convert postfix notation back into infix. Recursive function??
+    postfix = input[:]
+    infix = []
     
+    if isOp(postfix[upp]):
+        
+        headop = returnOpDetails(postfix[upp]) #returns operator details
+        
+        if headop[2] == 2: #means it's a binary operator
+            
+            #See notes above the derive() function for explanation
+            firstinfix = convertFromRPN(postfix,low,upp-2-grasp(postfix,upp-1)) #find the infix form of the first head
+            secondinfix = convertFromRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1) #find the infix form of the second head
+            fi,si = firstinfix, secondinfix
+            
+            if isOp(postfix[upp-2-grasp(postfix,upp-1)]):
+                firstop = returnOpDetails(postfix[upp-2-grasp(postfix,upp-1)])
+                
+                if headop[0] > firstop[0]:
+                    infix.append('(')
+                    infix.extend(fi)
+                    infix.append(')')
+                else:
+                    infix.extend(fi)
+            else:
+                infix.extend(fi)
+            
+            infix.append(postfix[upp])
+                
+            if isOp(postfix[upp-1]):
+                secondop = returnOpDetails(postfix[upp-1])
+            
+                if (headop[0] > secondop[0]) or secondop[1] == 'r':
+                    infix.append('(')
+                    infix.extend(si)
+                    infix.append(')')
+                else:
+                    infix.extend(si)
+            else:
+                infix.extend(si)
+
+        elif headop[2] == 1: #means it's a unary operator
+            
+            firstinfix = convertFromRPN(postfix,low,upp-1) #find the infix form of the only head
+            fi = firstinfix
+            
+            infix.append(postfix[upp])
+            infix.append('(')
+            infix.extend(fi)
+            infix.append(')')
+    else:
+        infix.extend(postfix[low:upp+1])
+    
+    return infix
 ########################AWESOMENESS#################################
 # The following pretty much follows: yujor.fon.rs/pdfs/Vol11No1-5.pdf
 
@@ -384,7 +438,7 @@ def derive(function, low, upp):
     
 # Take the input
 
-function = cleanInput(raw_input('please enter your equation here with x as the subject:\n'))
+function = cleanInput(raw_input('please enter your equation here:\n'))
 variablename = setMainVar(cleanInput(raw_input("please enter that you're differentiating with respect to:\n")))
 
 
@@ -412,5 +466,7 @@ for i in testcases:
     print ' '.join(k for k in a)
     derivative = derive(a, 0, -1)
     print ' '.join(j for j in derivative)
+    if testcases.index(i) not in [12,13,14]: #testcases 12,13,14 die due to being incomplete
+        print ''.join(l for l in convertFromRPN(derivative, 0, -1))
     print "\n"
 print time.time()-start
