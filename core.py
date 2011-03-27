@@ -189,13 +189,13 @@ def convertToRPN (input): #Shunting-yard algorithm. Don't bother trying to figur
 
     return outputstack
 
-def convertFromRPN (input, low, upp): #Should convert postfix notation back into infix. Recursive function??
+def convertFromRPN (input, low, upp): #Should convert postfix notation back into infix.
     postfix = input[:]
     infix = []
     
     if isOp(postfix[upp]):
         
-        headop = returnOpDetails(postfix[upp]) #returns operator details
+        headop = returnOpDetails(postfix[upp]) #returns operator for the rightmost operator
         
         if headop[2] == 2: #means it's a binary operator
             
@@ -204,24 +204,24 @@ def convertFromRPN (input, low, upp): #Should convert postfix notation back into
             secondinfix = convertFromRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1) #find the infix form of the second head
             fi,si = firstinfix, secondinfix
             
-            if isOp(postfix[upp-2-grasp(postfix,upp-1)]):
+            if isOp(postfix[upp-2-grasp(postfix,upp-1)]): #checks whether the rightmost character of the first head is an operator
                 firstop = returnOpDetails(postfix[upp-2-grasp(postfix,upp-1)])
                 
-                if headop[0] > firstop[0]:
-                    infix.append('(')
+                if headop[0] > firstop[0]: #if the precedence of the current operator being worked on is larger than that of one the first head, then we need brackets.
+                    infix.append('(')      #for example, we have * as headop and + as firstop
                     infix.extend(fi)
                     infix.append(')')
                 else:
                     infix.extend(fi)
-            else:
+            else: #rightmost head is just a number, so no brackets needed
                 infix.extend(fi)
             
-            infix.append(postfix[upp])
+            infix.append(postfix[upp]) # so we have the first infix in there, add in the operator
                 
             if isOp(postfix[upp-1]):
                 secondop = returnOpDetails(postfix[upp-1])
             
-                if (headop[0] > secondop[0]) or secondop[1] == 'r':
+                if headop[0] > secondop[0]: #same as above pretty much
                     infix.append('(')
                     infix.extend(si)
                     infix.append(')')
@@ -235,10 +235,14 @@ def convertFromRPN (input, low, upp): #Should convert postfix notation back into
             firstinfix = convertFromRPN(postfix,low,upp-1) #find the infix form of the only head
             fi = firstinfix
             
-            infix.append(postfix[upp])
-            infix.append('(')
-            infix.extend(fi)
-            infix.append(')')
+            infix.append(postfix[upp]) #since it's unary, operator goes first.
+            
+            if len(fi) > 1: #only add in brackets if there is a use for them. something like 3 24 x * + neg() which goes to neg()(24x+1)
+                infix.append('(')
+                infix.extend(fi)
+                infix.append(')')
+            else: #we have something like 1 neg(), which should just go to neg()1 rather than neg()(1)
+                infix.extend(fi)
     else:
         infix.extend(postfix[low:upp+1])
     
@@ -393,7 +397,7 @@ def derive(function, low, upp):
 
                     exponent = sh[:] #just a copy which is later changed
                     
-                    #TODO call an RPN evaluator for the power in case it's in the form 2 3 *
+                    #TODO call an RPN evaluator for the power in case it's in the form 2 3 *, or 2 3 ^ or anything but a single number
                     if exponent[-1] == 'neg()': #if we have a negative power such as ^-1 or ^-2, it's in the form [....,neg()]
                         exponent[0] = str(int(exponent[0]) + 1) #to take away one from the power in this case, can just add 1 without changing the neg()
                     else:
@@ -444,7 +448,7 @@ variablename = setMainVar(cleanInput(raw_input("please enter that you're differe
 
 ##########################TESTCASES#################################
 
-testcases = ['1+1', '-2+x', '6+78-847', '1+x', '748x^2', '5/(374+45x)', '(1+x)/(1-x)', '7x^10 - (54/34x)', '1+3(x+2)', '2x*(-2)', 'x^6 + 98x^2 + (5/7)x^4', '((x+x^(-1))^2 +9 )^3', '(x/5^x)*(2^((x^(-1))/8^x))', '2^((-45) + 2x)', '(x^6)^(x^(-1)) + 23^x']
+testcases = ['1+1', '-2+x', '6+78-847', '1+x', '748x^2', '5/(374+45x)', '(1+x)/(1-x)', '7x^10 - (54/34x)', '1+3(x+2)', '2x*(-2)', 'x^6 + 98x^2 + (5/7)x^4', '((x+x^(-1))^2 +9 )^3', '(x/5^x)*(2^((x^(-1))/8^x))', '2^((-45) + 2x)', '(x^6)^(x^(-1)) + 23^x', 'x^2^3^4']
 
 #for i in testcases:
     #print "this is testcase number " + str(testcases.index(i))
