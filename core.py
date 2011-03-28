@@ -1,3 +1,4 @@
+from __future__ import division
 import sys,time
 
 def cleanInput(input): #standardises input
@@ -195,7 +196,7 @@ def convertFromRPN (input, low, upp): #Should convert postfix notation back into
     
     if isOp(postfix[upp]):
         
-        headop = returnOpDetails(postfix[upp]) #returns operator for the rightmost operator
+        headop = returnOpDetails(postfix[upp]) #returns operator details for the rightmost operator
         
         if headop[2] == 2: #means it's a binary operator
             
@@ -247,6 +248,142 @@ def convertFromRPN (input, low, upp): #Should convert postfix notation back into
         infix.extend(postfix[low:upp+1])
     
     return infix
+    
+def evaluateRPN(input): #take numbers and give a result. DOES NOT TAKE VARIABLES
+    original = input[:]
+    output = []
+    
+    for i in original:
+        if not isOp(i): #must be a number
+            output.append(i)
+        else: #must be an operator
+            opdetails = returnOpDetails(i)
+            
+            #this is all called later. note how x and y are reverse to take into account not commutative operators. example:
+            # 2 3 ^ in the original. this is 2^3 in infix. output contains 2 3. output.pop() gives us 3 and then 2, so x = 3 and y = 2. so we do y**x
+            functionmap = {'+':lambda x,y: y+x, '-':lambda x,y: y-x, '*':lambda x,y: y*x, '/':lambda x,y: y/x, '^':lambda x,y: y**x, 'neg()':lambda x: -x}
+            
+            #the floats are there because sometimes you get decimals points passed through, and you need to go str->float->int
+            if opdetails[2] == 2: #binary operator
+                
+                value = functionmap[i](float(output.pop()),float(output.pop()))
+                if int(value) == value: #avoid passing floats if possible
+                    value = int(value)
+                output.append(str(value)) #pops top 2 values off output, performs op, adds back on  
+            
+            elif opdetails[2] == 1: #unary operator
+                value = functionmap[i](float(output.pop()))
+                if int(value) == value:
+                    value = int(value)
+                output.append(str(value)) #pops top value off output, performs op, adds back on
+    
+    return output
+
+def simplifyRPN(input, low, upp): #takes RPN with numbers and variables and simplifies
+    postfix = input[:]
+    output = []
+    
+    if varname not in postfix: #no vars at all, we can just do the evalRPN function
+        output.extend(evaluateRPN(postfix))
+    else:
+        if isOp(postfix[upp]):
+        
+            headop = returnOpDetails(postfix[upp]) #returns op details for the last operator in the rpn
+        
+            if headop[2] == 2: #means it's a binary operator
+            
+                #See notes above the derive() function for explanation
+                firsthead = fh = postfix[low:upp-1-grasp(postfix,upp-1)] #due to python's method of list splicing, upp-1 rather than upp-2 is used
+                secondhead = sh = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound
+                #print "fh: " + str(fh)
+                #print "sh: " + str(sh)
+
+                if varname in fh and len(fh) > 1 and varname not in sh: #we have a var in the first head, not the second, and this var has some number with it
+
+                    firstsimp = fs = simplifyRPN(postfix,low,upp-2-grasp(postfix,upp-1)) #run recursively to see if any parts before simplify
+                    secondsimp = ss = evaluateRPN(sh) #doesn't have a variable so we can just use normal rpn evaluation
+                    #print "fs1: " + str(fs)
+                    #print "ss1: " + str(ss)
+                    firstop = fs[-1] #this is the operator at the end of fs
+                    #print "headop: " + str(postfix[upp])
+                    #print "firstop: " + str(firstop)
+                    if postfix[upp] == "*" and firstop == "*": #we have something in the form 758 x * 9 * or x 758 * 9 *
+                        
+                        firstsimphead = fsh = fs[0:-2-grasp(fs,-2)] #same as the firsthead code above, but with hardcoded values for low and upp, and acting on fs
+                        secondsimphead = ssh = fs[-2-grasp(fs,-2):-1] #same as the secondhead code
+                        #print "fsh1: " + str(fsh)
+                        #print "ssh1: " + str(ssh)
+
+                        if varname in fsh and varname not in ssh: #form x 758 * 9 *
+                            output.extend(evaluateRPN(ssh+ss+['*'])) # in this example, add 6822 to the output
+                            output.extend(fsh) #add the part with the variable
+                        elif varname in ssh and varname not in fsh: #form 758 x * 9 *
+                            output.extend(evaluateRPN(fsh+ss+['*'])) # still adding 6822 to the output
+                            output.extend(ssh) #add the part with the varibale
+                        else:
+                            output.extend(fs)
+                            output.extend(ss)
+                        
+                        output.append('*')
+                    else:
+                        output.extend(fs)
+                        output.extend(ss)
+                        output.append(postfix[upp])
+            
+                elif varname not in fh and varname in sh and len(sh) > 1: #we have a var in the second head, not the first, and this var has some number with it
+                
+                    firstsimp = fs = evaluateRPN(fh) #doesn't have a variable so we can just use normal rpn evaludation
+                    secondsimp = ss = simplifyRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1) #run recursively to see if any bits before simplify
+                    #print "fs2: " + str(fs)
+                    #print "ss2: " + str(ss)
+
+                    secondop = ss[-1] #this is the operator at the end of ss
+                    #print "headop: " + str(postfix[upp])
+                    #print "secondop: " + str(secondop)
+                    if postfix[upp] == "*" and secondop == "*": #we have something in the form 758 x * 9 * or x 758 * 9 *
+                        
+                        firstsimphead = fsh = ss[0:-2-grasp(ss,-2)] #same as the firsthead code above, but with hardcoded values for low and upp, and acting on ss
+                        secondsimphead = ssh = ss[-2-grasp(ss,-2):-1] #same as the secondhead code
+                        #print "fsh2: " + str(fsh)
+                        #print "ssh2: " + str(ssh)
+                        
+                        if varname in fsh and varname not in ssh: #form x 758 * 9 *
+                            output.extend(evaluateRPN(ssh+fs+['*'])) # in this example, add 6822 to the output
+                            output.extend(fsh) #add the part with the variable
+                        elif varname in ssh and varname not in fsh: #other form
+                            output.extend(evaluateRPN(fsh+fs+['*'])) # still adding 6822 to the output
+                            output.extend(ssh) #add the part with the varibale
+                        else:
+                            output.extend(fs)
+                            output.extend(ss)
+                        
+                        output.append('*')
+                    else:
+                        output.extend(fs)
+                        output.extend(ss)
+                        output.append(postfix[upp])
+                
+                else:
+                    
+                    firstsimp = fs = simplifyRPN(postfix,low,upp-2-grasp(postfix,upp-1))
+                    secondsimp = ss = simplifyRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1)
+
+                    output.extend(fs)
+                    output.extend(ss)
+                    output.append(postfix[upp]) #add the operator at the end
+            
+            elif headop[2] == 1: #means it's a unary operator
+                firsthead = fh = postfix[low:upp] #same as in binary, list splicing means upp instead of upp-1 is used
+                
+                output.extend(fh)
+                output.append(postfix[upp])
+    
+        else:
+            output.extend(postfix[low:upp+1]) #no operator at end, so must be a single num or var, so add everything left to the output
+    
+    return output
+
+
 ########################AWESOMENESS#################################
 # The following pretty much follows: yujor.fon.rs/pdfs/Vol11No1-5.pdf
 
@@ -395,13 +532,13 @@ def derive(function, low, upp):
                         derivat.extend(fd) # nf'(x)
                         derivat.append("*") #nf'(x)*
 
-                    exponent = sh[:] #just a copy which is later changed
+                    exponent = evaluateRPN(sh[:]) #should simplify any powers into a single number
+                    exponent[0] = str(int(float(exponent[0])-1)) if int(float(exponent[0])-1) == float(exponent[0])-1 else str(float(exponent[0])-1) #take one from the power
+                    # ^ since some powers may be divided, it's hard to predicted whether we have an int or float there
                     
-                    #TODO call an RPN evaluator for the power in case it's in the form 2 3 *, or 2 3 ^ or anything but a single number
-                    if exponent[-1] == 'neg()': #if we have a negative power such as ^-1 or ^-2, it's in the form [....,neg()]
-                        exponent[0] = str(int(exponent[0]) + 1) #to take away one from the power in this case, can just add 1 without changing the neg()
-                    else:
-                        exponent = [str(int(exponent[0]) - 1)] #positive power, so we take away one.
+                    if exponent[0][0] == '-': #it's a negative number -> unary minus
+                        exponent[0] = exponent[0][1:] #remove the unary minus, and keep it all a list
+                        exponent.append('neg()') #add in unary minus at the end
                     
                     if exponent[0] == '0': #anything to the power of 0 is 1, so we can ignored it
                         pass
@@ -423,8 +560,8 @@ def derive(function, low, upp):
             if fd == ['0']: #f'(x) is 0, so we can forget about the neg()
                 derivat.append('0')
             else:
-                    derivat.extend(fd)
-                    derivat.append('neg()')
+                derivat.extend(fd)
+                derivat.append('neg()')
         else:
             sys.exit('fail one')
         
@@ -450,18 +587,6 @@ variablename = setMainVar(cleanInput(raw_input("please enter that you're differe
 
 testcases = ['1+1', '-2+x', '6+78-847', '1+x', '748x^2', '5/(374+45x)', '(1+x)/(1-x)', '7x^10 - (54/34x)', '1+3(x+2)', '2x*(-2)', 'x^6 + 98x^2 + (5/7)x^4', '((x+x^(-1))^2 +9 )^3', '(x/5^x)*(2^((x^(-1))/8^x))', '2^((-45) + 2x)', '(x^6)^(x^(-1)) + 23^x', 'x^2^3^4']
 
-#for i in testcases:
-    #print "this is testcase number " + str(testcases.index(i))
-    #print i
-    #print tokenizer(cleanInput(i))
-    #print convertToRPN(cleanInput(i))
-    #print grasp(convertToRPN(cleanInput(i)))
-    #try:
-        #print grasp(convertToRPN(cleanInput(i)), convertToRPN(cleanInput(i)).index('neg()'))
-    #except ValueError:
-        #pass
-    #print "\n"
-
 start = time.time()
 for i in testcases:
     print "this is testcase number " + str(testcases.index(i))
@@ -471,6 +596,7 @@ for i in testcases:
     derivative = derive(a, 0, -1)
     print ' '.join(j for j in derivative)
     if testcases.index(i) not in [12,13,14]: #testcases 12,13,14 die due to being incomplete
-        print ''.join(l for l in convertFromRPN(derivative, 0, -1))
+        print ' '.join(h for h in simplifyRPN(derivative,0,-1))
+        print ''.join(d for d in convertFromRPN(simplifyRPN(derivative,0,-1), 0, -1))
     print "\n"
 print time.time()-start
