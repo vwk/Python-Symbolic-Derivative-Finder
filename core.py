@@ -30,9 +30,9 @@ def isVar (input): # can (and will) be expanded to take multiple variables #WTF 
     else:
         return False
 
-def returnOpDetails(operator): #returns list, [0] is precedence, [1] is associativity, [2] is grasp
+def returnOpDetails(operator): #returns list, [0] is precedence, [1] is associativity, [2] is grasp, [3] is commutativity
     
-    optable = {'^':[4,'r',2], 'neg()':[3,'r',1], '*':[3, 'l',2], '/':[3,'l',2], '+':[2,'l',2], '-':[2,'l',2]}
+    optable = {'^':[4,'r',2,False], 'neg()':[3,'r',1,False], '*':[3, 'l',2,True], '/':[3,'l',2,False], '+':[2,'l',2,True], '-':[2,'l',2,False]}
     
     return optable[operator]
 
@@ -184,7 +184,7 @@ def convertToRPN (input): #Shunting-yard algorithm. Don't bother trying to figur
 
     return outputstack
 
-def convertFromRPN (input, low, upp): #Should convert postfix notation back into infix.
+def convertFromRPN (input, low=0, upp=-1): #Should convert postfix notation back into infix.
     postfix = input[:]
     infix = []
     
@@ -243,7 +243,121 @@ def convertFromRPN (input, low, upp): #Should convert postfix notation back into
     
     return infix
     
-def evaluateRPN(input, fractions=True): #take numbers and give a result. DOES NOT TAKE VARIABLES
+def mapRPN(input,low=0,upp=-1,depth=0): #this should create a "map" of the rpn to help my understanding
+    postfix = input[:]
+    output = []
+    
+    if isOp(postfix[upp]):
+        
+        nary = returnOpDetails(postfix[upp])[2] #returns grasp and hence whether operator is binary or unary
+        
+        opnames = {'+':'addition','-':'subtraction','*':'multiplication','/':'division','^':'exponiation','neg()':'negation'}
+        
+        if nary == 2: #means it's a binary operator
+            
+            #See above table above the derive() function for this to make sense.
+            firsthead = postfix[low:upp-1-grasp(postfix,upp-1)] #due to python's method of list splicing, upp-1 rather than upp-2 is used
+            firstmap = mapRPN(postfix,low,upp-2-grasp(postfix,upp-1),depth+1) #note how here we go back to the notation in the chart
+            fh,fm = firsthead, firstmap
+        
+            secondhead = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound
+            secondmap = mapRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1,depth+1) #note how here we go back to the notation in the chart
+            sh,sm = secondhead, secondmap
+            
+            recurlist = []
+            recurlist.append(str(depth)+":"+opnames[postfix[upp]]+":"+str(fh)+"and"+str(sh))
+            recurlist.append(fm)
+            recurlist.append(sm)
+            output.extend(recurlist)
+
+        elif nary == 1: #means it's a unary operator
+            
+            firsthead = postfix[low:upp] #same as in binary, list splicing means upp instead of upp-1 is used
+            firstmap = mapRPN(postfix,low,upp-1,depth+1) #same as binary, go back to proper notation
+            fh, fm = firsthead, firstmap
+            
+            recurlist = []
+            recurlist.append(str(depth)+":"+opnames[postfix[upp]]+":"+str(fh))
+            recurlist.append(fm)
+            output.extend(recurlist)
+    
+    else:
+        output.append(str(depth)+":number:"+str(postfix[low:upp+1][0]))
+        
+    return output
+
+def shiftVariableRPN(input, low=0, upp=-1): #takes the RPN and attempts to shift variables as far up and then as far right as possible
+    postfix = input[:]
+    output = []
+    
+    if not isOp(postfix[upp]): #no ops, return input
+        output.extend(postfix[low:upp+1])
+    else: #we have an op, and so head
+
+        headop = returnOpDetails(postfix[upp]) #returns op details for the last operator in the postfix
+        
+        if headop[2] == 2: #means it's a binary operator
+
+            firstshift = fs = shiftVariableRPN(postfix,low,upp-2-grasp(postfix,upp-1)) #shift all the variables up to that point to the right, return head
+            secondshift = ss = shiftVariableRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1) #ditto as above, return head
+            #print "before:",fs,ss
+
+            if varname in fs and varname not in ss and headop[3]: #we have a var in the first head, not the second, and function is commutative
+                fs,ss = ss,fs #so we switch the heads around
+            
+            firstop = fo = fs[-1] if isOp(fs[-1]) else '' #operator at the top of head 1.
+            secondop = so = ss[-1] if isOp(ss[-1]) else '' #operator at the top of head 2
+            
+            #print "after:",fs,ss
+            #print postfix[upp],fo,so
+            if postfix[upp] == "*" and (fo == "*" or so == "*"): #two multiplications, so we can promote variable up or to the right
+                
+                if fo == "*" and so == "*": #multiplications in both heads, find right heads, check for vars, take var to the right (or we have two integers, take them right)
+                    
+                    firstshiftleft, firstshiftright = fsl,fsr = fs[0:-2-grasp(fs,-2)],fs[-2-grasp(fs,-2):-1] #hard coded left and right heads of the right head
+                    secondshiftleft, secondshiftright = ssl, ssr = ss[0:-2-grasp(ss,-2)],ss[-2-grasp(ss,-2):-1] #hard coded left and right heads of the left head
+                    #print "fsl: ",fsl,"fsr: ",fsr,"ssl: ",ssl,"ssr: ",ssr
+                    
+                    if varname not in fsl and varname not in ssl:
+                        fsr,ssl = ssl,fsr
+                    
+                    fs = fsl+fsr+['*']
+                    ss = ssl+ssr+['*']
+                
+                elif fo == "*" and not secondop: #find right head of fs, switch with left head ss if there's a variable there
+                    
+                    firstshiftleft, firstshiftright = fsl,fsr = fs[0:-2-grasp(fs,-2)],fs[-2-grasp(fs,-2):-1] #hard coded left and right heads of the right head
+                    #print "fsl: ",fsl,"fsr: ",fsr,"ss: ",ss
+                    if varname in fsr:
+                        fsr,ss = ss,fsr
+                    
+                    fs = fsl+fsr+['*']
+                    
+                elif so == "*" and not firstop: #find right head of ss, switch with fs
+                    
+                    secondshiftleft, secondshiftright = ssl, ssr = ss[0:-2-grasp(ss,-2)],ss[-2-grasp(ss,-2):-1] #hard coded left and right heads of the left head
+                    #print "ssl:",ssl,"ssr: ",ssr,"fs:",fs
+                    if varname in ssr:
+                        ssr,fs = fs,ssr
+                    
+                    ss = ssl+ssr+['*']
+            
+                if varname in fs and varname not in ss and headop[3]: #repeat this with the new stuff
+                    fs,ss = ss,fs
+
+            output.extend(fs)
+            output.extend(ss)
+            output.append(postfix[upp]) #add the operator at the end
+            
+        elif headop[2] == 1: #means it's a unary operator
+            firsthead = fh = postfix[low:upp] #same as in binary, list splicing means upp instead of upp-1 is used
+            
+            output.extend(fh)
+            output.append(postfix[upp])
+
+    return output
+    
+def evaluateRPN(input, fractions=True): #take numbers or fractions and give a result. DOES NOT TAKE VARIABLES
     original = input[:]
     output = []
 
@@ -317,7 +431,7 @@ def evaluateRPN(input, fractions=True): #take numbers and give a result. DOES NO
     
     return output
 
-def simplifyRPN(input, low, upp): #takes RPN with numbers and variables and simplifies
+def simplifyRPN(input, low=0, upp=-1): #takes RPN with numbers and variables and simplifies
     postfix = input[:]
     output = []
     
@@ -334,41 +448,19 @@ def simplifyRPN(input, low, upp): #takes RPN with numbers and variables and simp
             #See notes above the derive() function for explanation
             firsthead = fh = postfix[low:upp-1-grasp(postfix,upp-1)] #due to python's method of list splicing, upp-1 rather than upp-2 is used
             secondhead = sh = postfix[upp-1-grasp(postfix,upp-1):upp] #same as above, upp rather than upp-1 for the upper bound
-            #print "fh: " + str(fh)
-            #print "sh: " + str(sh)
 
             if varname in fh and varname not in sh: #we have a var in the first head, not the second
                 firstsimp = fs = simplifyRPN(postfix,low,upp-2-grasp(postfix,upp-1)) #run recursively to see if any parts before simplify
                 secondsimp = ss = evaluateRPN(sh) #doesn't have a variable so we can just use normal rpn evaluation
-                #print "fs1: " + str(fs)
-                #print "ss1: " + str(ss)
-                
-                firstop = fs[-1] #this is the operator at the end of fs
-                secondop = ''
-                #print "headop: " + str(postfix[upp])
-                #print "firstop: " + str(firstop)
 
             elif varname not in fh and varname in sh: #we have a var in the second head, not the first
                 firstsimp = fs = evaluateRPN(fh) #doesn't have a variable so we can just use normal rpn evaludation
                 secondsimp = ss = simplifyRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1) #run recursively to see if any bits before simplify
-                #print "fs2: " + str(fs)
-                #print "ss2: " + str(ss)
-
-                firstop = ''
-                secondop = ss[-1] #this is the operator at the end of ss
-                #print "headop: " + str(postfix[upp])
-                #print "secondop: " + str(secondop)
             
             else: #vars in both, no easy shortcuts to take
                 firstsimp = fs = simplifyRPN(postfix,low,upp-2-grasp(postfix,upp-1))
                 secondsimp = ss = simplifyRPN(postfix,upp-1-grasp(postfix,upp-1),upp-1)
-                
-                firstop, secondop = '',''
-
-            if postfix[upp] == "*" and (firstop == "*" or secondop == "*"):
-                #split either fs and ss into it's constituent parts and then rearrange
-                pass
-              
+            
             output.extend(fs)
             output.extend(ss)
             output.append(postfix[upp]) #add the operator at the end
@@ -381,7 +473,6 @@ def simplifyRPN(input, low, upp): #takes RPN with numbers and variables and simp
             output.extend(fs)
             output.append(postfix[upp])
     
-      
     return output
 
 
@@ -400,6 +491,8 @@ def simplifyRPN(input, low, upp): #takes RPN with numbers and variables and simp
 def grasp (input, index=1000):
     graspcounter = 0 #keeps track of the grasp
     poscounter = 0 #keeps a track of the position
+    
+    index = len(input)-1 if abs(index) > len(input) else index #if you ask for an index outside of the len of the input, it sets index to be the last char of input
     
     reversed = input[:index+1] #takes everything before (and including) the expression at index
     reversed.reverse() #since lists are easier to read left to right
@@ -432,7 +525,7 @@ def leftGraspBound (input,index):
 #index at upp-1
 #grasp from low to upp-1
 
-def derive(function, low, upp):
+def derive(function, low=0, upp=-1):
     postfix = function[:] #use same notation as the paper
     derivat = [] #where the final derivative will be stored
     
@@ -601,11 +694,17 @@ for i in testcases:
     print "this is testcase number " + str(testcases.index(i))
     print i
     a = convertToRPN(cleanInput(i))
-    print ' '.join(k for k in a)
-    derivative = derive(a, 0, -1)
-    print ' '.join(j for j in derivative)
-    if testcases.index(i) not in [12,13,14]: #testcases 12,13,14 die due to being incomplete
-        print ' '.join(h for h in simplifyRPN(derivative,0,-1))
-        print ''.join(d for d in convertFromRPN(simplifyRPN(derivative,0,-1), 0, -1))
+    #print ' '.join(k for k in a)
+    derivative = derive(a)
+    print "derivative in rpn: ",' '.join(j for j in derivative)
+    #try:
+        #mapped = mapRPN(derivative,0,-1)
+        #print mapped
+    #except:
+        #pass
+    if testcases.index(i) not in [0,1,2,3,8,12,13,14]: #testcases 12,13,14 die due to being incomplete
+        print "rpn simplified: ",' '.join(h for h in simplifyRPN(derivative))
+        print ''.join(d for d in convertFromRPN(simplifyRPN(derivative)))
+        print ''.join(r for r in convertFromRPN(simplifyRPN(shiftVariableRPN(shiftVariableRPN(derivative)))))
     print "\n"
 print time.time()-start
