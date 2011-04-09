@@ -6,7 +6,7 @@ def cleanInput(input): #standardises input
     return input.replace(' ', '').replace('**','^').lower()
 
 def setMainVar(input): #Allows for any variable, not just x to be used.
-                       #Can later allow for multiple variables? #24-03-11 15:22PM WTF did I mean here?
+        #Can later allow for multiple variables? #24-03-11 15:22PM WTF did I mean here?
     global varname
     varname = input
 
@@ -32,7 +32,7 @@ def isVar (input): # can (and will) be expanded to take multiple variables #WTF 
 
 def returnOpDetails(operator): #returns list, [0] is precedence, [1] is associativity, [2] is grasp, [3] is commutativity
     
-    optable = {'^':[4,'r',2,False], 'neg()':[3,'r',1,False], '*':[3, 'l',2,True], '/':[3,'l',2,False], '+':[2,'l',2,True], '-':[2,'l',2,False]}
+    optable = {'sin()':[5,'r',1,False],'cos()':[5,'r',1,False],'tan()':[5,'r',1,False],'^':[4,'r',2,False], 'neg()':[3,'r',1,False], '*':[3, 'l',2,True], '/':[3,'l',2,False], '+':[2,'l',2,True], '-':[2,'l',2,False]}
     
     return optable[operator]
 
@@ -544,120 +544,123 @@ def derive(function, low=0, upp=-1):
             secondderivative = derive(postfix,upp-1-grasp(postfix,upp-1),upp-1) #note how here we go back to the notation in the chart -> v'
             sh,sd = secondhead,secondderivative
 
+
+            if postfix[upp] == "-" or postfix[upp] == "+": #simplest situation, we have uv+/-, we turn it to u'v'+/-
+                
+                if fd == ['0'] and sd == ['0']: #both null
+                    derivat.append('0') #add a null to final
+                elif fd != ['0'] and sd == ['0']: #second derivative in null, we can just forget about it
+                    derivat.extend(fd) #all we need is the first derivative then
+                elif fd == ['0'] and sd != ['0']: #first derivative is null, take note of unary minus
+                    derivat.extend(sd) #so we can just add in the second derivative
+                    if postfix[upp] == '-': #means that we have -v'
+                        derivat.append('neg()')
+                else:
+                    derivat.extend(fd) #add first derivative to final -> u'
+                    derivat.extend(sd) #add second derivative to final -> u'v'
+                    derivat.append(postfix[upp]) #add op at the end -> u'v'+/-
+            
+            elif postfix[upp] == "*" or postfix[upp] == "/": #here we use the product rule to differentiate -> u'v + uv', or the quotient rule -> (u'v - v'u)/v^2
+                
+                #next block deals with u'v
+                if fd == ['0'] or sh == ['0']: #one of u'v is equal to 0 -> u'v == 0
+                    pass #forget it exists, and later add a unary operator if needed
+                elif fd == ['1']: # u' is 1 so we have 1v* == v
+                    derivat.extend(sh)
+                elif sh == ['1']: # v is 1 so we have 1u'* == u'
+                    derivat.extend(fd)
+                else:
+                    derivat.extend(fd) #add u' to final
+                    derivat.extend(sh) #add v to final. now it has u'v in it
+                    derivat.append("*") #add operator to the final. final now has u'v* in it
+                
+                #next block deals with v'u
+                if fh == ['0'] or sd == ['0']: #one of uv' is null -> v'u == 0
+                    pass #we can just ignore it even exists, and then later avoid adding an operator
+                elif fh == ['1']: # u is 1 so we have 1v'* == v'
+                    derivat.extend(sd)
+                elif sd == ['1']: # v' is 1 so we have 1u* == u
+                    derivat.extend(fh)
+                else:
+                    derivat.extend(sd) # u'v*v'
+                    derivat.extend(fh) # u'v*v'u
+                    derivat.append("*") # u'v*v'u*
+                
+                #this block then does the last part of both rules
+                if postfix[upp] == "*": #product rule
+                    if fd != ['0'] and fh != ['0'] and sd != ['0'] and sh != ['0']: #Only add in an operator if we haven't already skipped a zero somewhere
+                        derivat.append("+") # u'v*v'u*+
+                else: #quotient rule
+                    if fd != ['0'] and sh != ['0'] and fh != ['0'] and sd != ['0']: #Same as above, only add if nothing has equalled 0 so far
+                        derivat.append("-") # u'v*v'u*-
+                    elif (fd == ['0'] or sh == ['0']) and (fh != ['0'] and sd != ['0']): #if u'v is 0 but v'u isn't, add a unary negative for v'u
+                        derivat.append("neg()") #v'u*neg()
+                    
+                    if sh == ['1']: #if sh, and hence v, == 1, then you're dividing by 1, so it can be skipped
+                        pass
+                    elif (fd == ['0'] or sh == ['0']) and (fh == ['0'] or sd == ['0']): #we have u'v and v'u both as zero, so we are dividing 0 by something
+                        derivat.append('0')
+                    else:
+                        derivat.extend(sh) #u'v*v'u*-v
+                        derivat.append("2") # u'v*v'u*-v2
+                        derivat.append("^") # u'v*v'u*-v2^
+                        derivat.append("/") # u'v*v'u*-v2^/
+
+            elif postfix[upp] == "^": #use the chain rule. (f(x))^n = nf'(x)(f(x))^(n-1) where f(x) is u (and so fh) and n is v (and so sh)
+                if varname not in sh: #checks that we don't have something to the power of x -> not yet implemented
+                    if sh != ['0'] and fh != ['0'] and fd != ['0']: #make sure that none of the things being multiplied are equal to 0
+                        
+                        if sh == ['1'] and fd == ['1']: #both n and f'(x) are 1, so ignore
+                            pass
+                        elif sh == ['1']: # n is equal to 1, we can ignore it
+                            derivat.extend(fd)
+                        elif fd == ['1']: # f'(x) is equal to 1, we can ignore it
+                            derivat.extend(sh)
+                        else:
+                            derivat.extend(sh) #send the second head to the the final -> now it contains n
+                            derivat.extend(fd) # nf'(x)
+                            derivat.append("*") #nf'(x)*
+
+                        exponent = evaluateRPN(sh[:]) #should simplify any powers into a single number
+                        exponent[0] = str(int(float(exponent[0])-1)) if int(float(exponent[0])-1) == float(exponent[0])-1 else str(float(exponent[0])-1) #take one from the power
+                        # ^ since some powers may be divided, it's hard to predicted whether we have an int or float there
+                        
+                        if exponent[0][0] == '-': #it's a negative number -> unary minus
+                            exponent[0] = exponent[0][1:] #remove the unary minus, and keep it all a list
+                            exponent.append('neg()') #add in unary minus at the end
+                        
+                        if exponent[0] == '0': #anything to the power of 0 is 1, so we can ignored it
+                            pass
+                        elif exponent[0] == '1': #anything to the ^1 is itself, so we just add in f(x)
+                            derivat.extend(fh)
+                        else:
+                            derivat.extend(fh) #nf'(x)*f(x) usually, or as it may be, nf(x), f'(x)f(x) or just f(x)
+                            derivat.extend(exponent) #nf'(x)*f(x)(n-1)
+                            derivat.append("^") #nf'(x)*f(x)(n-1)^
+                        
+                        if exponent[0] != '0' or (sh != ['1'] and fd != ['1']): #Check that some forms of nf'(x) or f(x)(n-1)^ exist
+                            derivat.append("*") #nf'(x)*f(x)(n-1)^*
+                    else:
+                        derivat.append('0')
+                else:
+                    print 'Exponents of x are currently not supported'
+            else:
+                system.exit('fail one 1')
+        
         elif nary == 1: #means it's a unary operator
             
             firsthead = postfix[low:upp] #same as in binary, list splicing means upp instead of upp-1 is used
             firstderivative = derive(postfix,low,upp-1) #same as binary, go back to proper notation
             fh, fd = firsthead, firstderivative
-
-        if postfix[upp] == "-" or postfix[upp] == "+": #simplest situation, we have uv+/-, we turn it to u'v'+/-
-            
-            if fd == ['0'] and sd == ['0']: #both null
-                derivat.append('0') #add a null to final
-            elif fd != ['0'] and sd == ['0']: #second derivative in null, we can just forget about it
-                derivat.extend(fd) #all we need is the first derivative then
-            elif fd == ['0'] and sd != ['0']: #first derivative is null, take note of unary minus
-                derivat.extend(sd) #so we can just add in the second derivative
-                if postfix[upp] == '-': #means that we have -v'
+        
+            if postfix[upp] == "neg()":#simple f(x)neg() goes to f'(x)neg()
+                if fd == ['0']: #f'(x) is 0, so we can forget about the neg()
+                    derivat.append('0')
+                else:
+                    derivat.extend(fd)
                     derivat.append('neg()')
             else:
-                derivat.extend(fd) #add first derivative to final -> u'
-                derivat.extend(sd) #add second derivative to final -> u'v'
-                derivat.append(postfix[upp]) #add op at the end -> u'v'+/-
-        
-        elif postfix[upp] == "*" or postfix[upp] == "/": #here we use the product rule to differentiate -> u'v + uv', or the quotient rule -> (u'v - v'u)/v^2
-            
-            #next block deals with u'v
-            if fd == ['0'] or sh == ['0']: #one of u'v is equal to 0 -> u'v == 0
-                pass #forget it exists, and later add a unary operator if needed
-            elif fd == ['1']: # u' is 1 so we have 1v* == v
-                derivat.extend(sh)
-            elif sh == ['1']: # v is 1 so we have 1u'* == u'
-                derivat.extend(fd)
-            else:
-                derivat.extend(fd) #add u' to final
-                derivat.extend(sh) #add v to final. now it has u'v in it
-                derivat.append("*") #add operator to the final. final now has u'v* in it
-            
-            #next block deals with v'u
-            if fh == ['0'] or sd == ['0']: #one of uv' is null -> v'u == 0
-                pass #we can just ignore it even exists, and then later avoid adding an operator
-            elif fh == ['1']: # u is 1 so we have 1v'* == v'
-                derivat.extend(sd)
-            elif sd == ['1']: # v' is 1 so we have 1u* == u
-                derivat.extend(fh)
-            else:
-                derivat.extend(sd) # u'v*v'
-                derivat.extend(fh) # u'v*v'u
-                derivat.append("*") # u'v*v'u*
-            
-            #this block then does the last part of both rules
-            if postfix[upp] == "*": #product rule
-                if fd != ['0'] and fh != ['0'] and sd != ['0'] and sh != ['0']: #Only add in an operator if we haven't already skipped a zero somewhere
-                    derivat.append("+") # u'v*v'u*+
-            else: #quotient rule
-                if fd != ['0'] and sh != ['0'] and fh != ['0'] and sd != ['0']: #Same as above, only add if nothing has equalled 0 so far
-                    derivat.append("-") # u'v*v'u*-
-                elif (fd == ['0'] or sh == ['0']) and (fh != ['0'] and sd != ['0']): #if u'v is 0 but v'u isn't, add a unary negative for v'u
-                    derivat.append("neg()") #v'u*neg()
-                
-                if sh == ['1']: #if sh, and hence v, == 1, then you're dividing by 1, so it can be skipped
-                    pass
-                elif (fd == ['0'] or sh == ['0']) and (fh == ['0'] or sd == ['0']): #we have u'v and v'u both as zero, so we are dividing 0 by something
-                    derivat.append('0')
-                else:
-                    derivat.extend(sh) #u'v*v'u*-v
-                    derivat.append("2") # u'v*v'u*-v2
-                    derivat.append("^") # u'v*v'u*-v2^
-                    derivat.append("/") # u'v*v'u*-v2^/
-
-        elif postfix[upp] == "^": #use the chain rule. (f(x))^n = nf'(x)(f(x))^(n-1) where f(x) is u (and so fh) and n is v (and so sh)
-            if varname not in sh: #checks that we don't have something to the power of x -> not yet implemented
-                if sh != ['0'] and fh != ['0'] and fd != ['0']: #make sure that none of the things being multiplied are equal to 0
-                    
-                    if sh == ['1'] and fd == ['1']: #both n and f'(x) are 1, so ignore
-                        pass
-                    elif sh == ['1']: # n is equal to 1, we can ignore it
-                        derivat.extend(fd)
-                    elif fd == ['1']: # f'(x) is equal to 1, we can ignore it
-                        derivat.extend(sh)
-                    else:
-                        derivat.extend(sh) #send the second head to the the final -> now it contains n
-                        derivat.extend(fd) # nf'(x)
-                        derivat.append("*") #nf'(x)*
-
-                    exponent = evaluateRPN(sh[:]) #should simplify any powers into a single number
-                    exponent[0] = str(int(float(exponent[0])-1)) if int(float(exponent[0])-1) == float(exponent[0])-1 else str(float(exponent[0])-1) #take one from the power
-                    # ^ since some powers may be divided, it's hard to predicted whether we have an int or float there
-                    
-                    if exponent[0][0] == '-': #it's a negative number -> unary minus
-                        exponent[0] = exponent[0][1:] #remove the unary minus, and keep it all a list
-                        exponent.append('neg()') #add in unary minus at the end
-                    
-                    if exponent[0] == '0': #anything to the power of 0 is 1, so we can ignored it
-                        pass
-                    elif exponent[0] == '1': #anything to the ^1 is itself, so we just add in f(x)
-                        derivat.extend(fh)
-                    else:
-                        derivat.extend(fh) #nf'(x)*f(x) usually, or as it may be, nf(x), f'(x)f(x) or just f(x)
-                        derivat.extend(exponent) #nf'(x)*f(x)(n-1)
-                        derivat.append("^") #nf'(x)*f(x)(n-1)^
-                    
-                    if exponent[0] != '0' or (sh != ['1'] and fd != ['1']): #Check that some forms of nf'(x) or f(x)(n-1)^ exist
-                        derivat.append("*") #nf'(x)*f(x)(n-1)^*
-                else:
-                    derivat.append('0')
-            else:
-                print 'Exponents of x are currently not supported'
-        
-        elif postfix[upp] == "neg()":#simple f(x)neg() goes to f'(x)neg()
-            if fd == ['0']: #f'(x) is 0, so we can forget about the neg()
-                derivat.append('0')
-            else:
-                derivat.extend(fd)
-                derivat.append('neg()')
-        else:
-            sys.exit('fail one')
+                sys.exit('fail one')
         
     elif isInt(postfix[upp]):
         derivat.append('0') #all numbers derive to 0
@@ -670,41 +673,47 @@ def derive(function, low=0, upp=-1):
     
     return derivat
     
+if __name__ == "__MAIN__":
+    # Take the input
     
-# Take the input
-
-function = cleanInput(raw_input('please enter your equation here:\n'))
-variablename = setMainVar(cleanInput(raw_input("please enter that you're differentiating with respect to:\n")))
-
-
-##########################TESTCASES#################################
-
-testcases = ['1+1', '-2+x', '6+78-847', '1+x', '748x^2', '5/(374+45x)', '(1+x)/(1-x)', '7x^10 - (54/34x)', '1+3(x+2)', '2x*(-2)', 'x^6 + 98x^2 + (5/7)x^4', '((x+x^(-1))^2 +9 )^3', '(x/5^x)*(2^((x^(-1))/8^x))', '2^((-45) + 2x)', '(x^6)^(x^(-1)) + 23^x', 'x^2^3^4']
-
-#testcases = ['5+7','(5/7)+9','9+(5/7)','(6/9)-(5/7)','(1/3)*(8/16)','(1/7)/(4/5)','(1/7)^4']
-
-#for i in testcases:
+    function = cleanInput(raw_input('please enter your equation here:\n'))
+    variablename = setMainVar(cleanInput(raw_input("please enter that you're differentiating with respect to:\n")))
     
-    #rpn = convertToRPN(cleanInput(i))
-    #print i
-    #print ' '.join(k for k in evaluateRPN(rpn))
-
-start = time.time()
-for i in testcases:
-    print "this is testcase number " + str(testcases.index(i))
-    print i
-    a = convertToRPN(cleanInput(i))
-    #print ' '.join(k for k in a)
-    derivative = derive(a)
-    print "derivative in rpn: ",' '.join(j for j in derivative)
-    #try:
-        #mapped = mapRPN(derivative,0,-1)
-        #print mapped
-    #except:
-        #pass
-    if testcases.index(i) not in [0,1,2,3,8,12,13,14]: #testcases 12,13,14 die due to being incomplete
-        print "rpn simplified: ",' '.join(h for h in simplifyRPN(derivative))
-        print ''.join(d for d in convertFromRPN(simplifyRPN(derivative)))
-        print ''.join(r for r in convertFromRPN(simplifyRPN(shiftVariableRPN(shiftVariableRPN(derivative)))))
-    print "\n"
-print time.time()-start
+    
+    ##########################TESTCASES#################################
+    
+    testcases = ['1+1', '-2+x', '6+78-847', '1+x', '748x^2', '5/(374+45x)', '(1+x)/(1-x)', '7x^10 - (54/34x)', '1+3(x+2)', '2x*(-2)', 'x^6 + 98x^2 + (5/7)x^4', '((x+x^(-1))^2 +9 )^3', '(x/5^x)*(2^((x^(-1))/8^x))', '2^((-45) + 2x)', '(x^6)^(x^(-1)) + 23^x', 'x^2^3']
+    
+    #testcases = ['5+7','(5/7)+9','9+(5/7)','(6/9)-(5/7)','(1/3)*(8/16)','(1/7)/(4/5)','(1/7)^4']
+    
+    #for i in testcases:
+        
+        #rpn = convertToRPN(cleanInput(i))
+        #print i
+        #print ' '.join(k for k in evaluateRPN(rpn))
+    
+    start = time.time()
+    for i in testcases:
+        print "this is testcase number " + str(testcases.index(i))
+        
+        rpn = convertToRPN(cleanInput(i))
+        #print ' '.join(k for k in rpn)
+        derivative = derive(rpn)
+        print "derivative in rpn: ",' '.join(j for j in derivative)
+        #try:
+            #mapped = mapRPN(derivative,0,-1)
+            #print mapped
+        #except:
+            #pass
+        if testcases.index(i) not in [12,13,14]: #testcases 12,13,14 die due to being incomplete
+            if len(derivative) > 1:
+                while shiftVariableRPN(derivative) != derivative:
+                    derivative = shiftVariableRPN(derivative)
+                simple = simplifyRPN(derivative)
+                print "simplified derivative in rpn: ",' '.join(k for k in simple)
+                print "in infix format: ",''.join(d for d in convertFromRPN(simple))
+                print "\n"
+            else:
+                print "so final deriv is: ", ' '.join(t for t in derivative)
+                print "\n"
+    print time.time()-start
